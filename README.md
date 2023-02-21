@@ -1,2 +1,1 @@
-# bilibili-video
-Bilibili视频爬虫
+# a bilibili spider

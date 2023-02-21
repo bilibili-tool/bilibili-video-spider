@@ -7,11 +7,7 @@ import time
 import sys
 import re
 import json
-import MySQLdb
-
-reload(sys)
-
-sys.setdefaultencoding('utf-8')
+import pandas as pd
 
 # id av cid title tminfo time click danmu coins favourites duration honor_click honor_coins honor_favourites
 # mid name article fans tags[3] common
@@ -33,6 +29,7 @@ def spider(url):
     html = requests.get(url, headers=head)
     selector = etree.HTML(html.text)
     content = selector.xpath("//html")
+    result_list = []
     for each in content:
         title = each.xpath('//div[@class="v-title"]/h1/@title')
         if title:
@@ -57,8 +54,10 @@ def spider(url):
             time_log = each.xpath('//div[@class="tminfo"]/time/i/text()')
             mid_log = each.xpath('//div[@class="b-btn f hide"]/@mid')
             name_log = each.xpath('//div[@class="usname"]/a/@title')
-            article_log = each.xpath('//div[@class="up-video-message"]/div[1]/text()')
-            fans_log = each.xpath('//div[@class="up-video-message"]/div[2]/text()')
+            article_log = each.xpath(
+                '//div[@class="up-video-message"]/div[1]/text()')
+            fans_log = each.xpath(
+                '//div[@class="up-video-message"]/div[2]/text()')
 
             if time_log:
                 time = time_log[0]
@@ -73,11 +72,11 @@ def spider(url):
             else:
                 name = ""
             if article_log:
-                article = article_log[0].replace(u"投稿：","")
+                article = article_log[0].replace(u"投稿：", "")
             else:
                 article = "-1"
             if fans_log:
-                fans = fans_log[0].replace(u"粉丝：","")
+                fans = fans_log[0].replace(u"粉丝：", "")
             else:
                 fans = "-1"
 
@@ -107,7 +106,8 @@ def spider(url):
 
                 cids = re.findall(r'cid=.+&aid', cid_html)
                 cid = cids[0].replace("cid=", "").replace("&aid", "")
-                info_url = "http://interface.bilibili.com/player?id=cid:" + str(cid) + "&aid=" + av
+                info_url = "http://interface.bilibili.com/player?id=cid:" + \
+                    str(cid) + "&aid=" + av
                 video_info = requests.get(info_url)
                 video_selector = etree.HTML(video_info.text)
                 for video_each in video_selector:
@@ -116,9 +116,12 @@ def spider(url):
                     coins_log = video_each.xpath('//coins/text()')
                     favourites_log = video_each.xpath('//favourites/text()')
                     duration_log = video_each.xpath('//duration/text()')
-                    honor_click_log = video_each.xpath('//honor[@t="click"]/text()')
-                    honor_coins_log = video_each.xpath('//honor[@t="coins"]/text()')
-                    honor_favourites_log = video_each.xpath('//honor[@t="favourites"]/text()')
+                    honor_click_log = video_each.xpath(
+                        '//honor[@t="click"]/text()')
+                    honor_coins_log = video_each.xpath(
+                        '//honor[@t="coins"]/text()')
+                    honor_favourites_log = video_each.xpath(
+                        '//honor[@t="favourites"]/text()')
 
                     if honor_click_log:
                         honor_click = honor_click_log[0]
@@ -162,31 +165,30 @@ def spider(url):
                         jsPages = jsData['page']
                         common = jsPages['acount']
                         try:
-                            conn = MySQLdb.connect(host='localhost', user='root', passwd='', port=3306, charset='utf8')
-                            cur = conn.cursor()
-                            conn.select_db('python')
-                            cur.execute('INSERT INTO video VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
-                                                [str(av), str(av), cid, title, tminfo, time, click, danmu, coins, favourites, duration,
-                                                 mid, name, article, fans, tag1, tag2, tag3, str(common), honor_click, honor_coins, honor_favourites])
-
-                            print "Succeed: av" + str(av)
-                        except MySQLdb.Error, e:
-                            print "Mysql Error %d: %s" % (e.args[0], e.args[1])
+                            result_list.append([str(av), cid, title, tminfo, time, click, danmu, coins, favourites, duration,
+                                                mid, name, article, fans, tag1, tag2, tag3, str(common), honor_click, honor_coins, honor_favourites],
+                                               columns=['av', 'cid', 'title', 'tminfo', 'time', 'click', 'danmu', 'coins', 'favourites', 'duration',
+                                                        'mid', 'name', 'article', 'fans', 'tag1', 'tag2', 'tag3', 'common', 'honor_click', 'honor_coins', 'honor_favourites'])
+                            print("Succeed: av" + str(av))
+                        except Exception as e:
+                            print("Mysql Error %d: %s" %
+                                  (e.args[0], e.args[1]))
                     else:
-                        print "Error_Json: " + url
+                        print("Error_Json: " + url)
             else:
-                print "Error_noCid:" + url
+                print("Error_noCid:" + url)
         else:
-            print "Error_404: " + url
+            print("Error_404: " + url)
+    result_list.to_csv('./result.csv', mod='a', index=False, encoding='utf-8')
 
 
 pool = ThreadPool(10)
 # results = pool.map(spider, urls)
 try:
     results = pool.map(spider, urls)
-except Exception, e:
+except Exception as e:
     # print 'ConnectionError'
-    print e
+    print(e)
     time.sleep(300)
     results = pool.map(spider, urls)
 
