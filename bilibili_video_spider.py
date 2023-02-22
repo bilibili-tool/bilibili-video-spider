@@ -4,32 +4,39 @@ from lxml import etree
 from multiprocessing.dummy import Pool as ThreadPool
 import requests
 import time
-import sys
 import re
-import json
 import pandas as pd
 
-# id av cid title tminfo time click danmu coins favourites duration honor_click honor_coins honor_favourites
-# mid name article fans tags[3] common
 
-urls = []
+def make_request_url():
+    '''
+    make bilibili video urls 
+    '''
+    # av cid title tminfo time click danmu coins favourites duration honor_click honor_coins honor_favourites
+    # mid name article fans tags[3] common
+    urls = []
+    for i in range(17501, 100000):
+        url = 'http://bilibili.com/video/av' + str(i)
+        urls.append(url)
+    return urls
 
-head = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.130 Safari/537.36'
-}
+# execute result list
+result_list = []
 
-time1 = time.time()
+def execute_spider(url):
+    '''
 
-for i in range(17501, 100000):
-    url = 'http://bilibili.com/video/av' + str(i)
-    urls.append(url)
-
-
-def spider(url):
-    html = requests.get(url, headers=head)
-    selector = etree.HTML(html.text)
+    '''
+    # request header
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.130 Safari/537.36'
+    }
+    # send request
+    response = requests.get(url, headers=headers)
+    selector = etree.HTML(response.text)
+    # select html
     content = selector.xpath("//html")
-    result_list = []
+    # for each bilibili video content
     for each in content:
         title = each.xpath('//div[@class="v-title"]/h1/@title')
         if title:
@@ -158,39 +165,40 @@ def spider(url):
                         duration = ""
 
                     json_url = "http://api.bilibili.com/x/reply?jsonp=jsonp&type=1&sort=0&pn=1&nohot=1&oid=" + av
-                    jsoncontent = requests.get(json_url, headers=head).content
-                    jsDict = json.loads(jsoncontent)
+                    jsoncontent = requests.get(json_url, headers=headers)
+                    jsDict = jsoncontent.json()
                     if jsDict['code'] == 0:
                         jsData = jsDict['data']
                         jsPages = jsData['page']
                         common = jsPages['acount']
-                        try:
-                            result_list.append([str(av), cid, title, tminfo, time, click, danmu, coins, favourites, duration,
-                                                mid, name, article, fans, tag1, tag2, tag3, str(common), honor_click, honor_coins, honor_favourites],
-                                               columns=['av', 'cid', 'title', 'tminfo', 'time', 'click', 'danmu', 'coins', 'favourites', 'duration',
-                                                        'mid', 'name', 'article', 'fans', 'tag1', 'tag2', 'tag3', 'common', 'honor_click', 'honor_coins', 'honor_favourites'])
-                            print("Succeed: av" + str(av))
-                        except Exception as e:
-                            print("Mysql Error %d: %s" %
-                                  (e.args[0], e.args[1]))
+                        result_list.append([str(av), cid, title, tminfo, time, click, danmu, coins, favourites, duration,
+                                            mid, name, article, fans, tag1, tag2, tag3, str(common), honor_click, honor_coins, honor_favourites])
+                        print("Succeed: av" + str(av))
                     else:
-                        print("Error_Json: " + url)
+                        print(f"Error_Json: {url}")
             else:
-                print("Error_noCid:" + url)
+                print(f"Error_noCid: {url}")
         else:
-            print("Error_404: " + url)
-    result_list.to_csv('./result.csv', mod='a', index=False, encoding='utf-8')
+            print(f"Error_404: {url}")
 
 
-pool = ThreadPool(10)
-# results = pool.map(spider, urls)
-try:
-    results = pool.map(spider, urls)
-except Exception as e:
-    # print 'ConnectionError'
-    print(e)
-    time.sleep(300)
-    results = pool.map(spider, urls)
-
-pool.close()
-pool.join()
+if __name__ == '__main__':
+    # get urls
+    urls = make_request_url()
+    try:
+        pool = ThreadPool(10)
+        results = pool.map(execute_spider, urls)
+    except Exception as e:
+        print(f"Error: {e}")
+        time.sleep(300)
+        results = pool.map(execute_spider, urls)
+    finally:
+        pool.close()
+        pool.join()
+        if len(result_list) > 0:
+            # list to dataframe
+            result_df = pd.DataFrame(result_list, columns=['av', 'cid', 'title', 'tminfo', 'time', 'click', 'danmu', 'coins', 'favourites', 'duration',
+                                                           'mid', 'name', 'article', 'fans', 'tag1', 'tag2', 'tag3', 'common', 'honor_click', 'honor_coins', 'honor_favourites'])
+            # dataframe to csv
+            result_df.to_csv('./result.csv', mod='a',
+                             index=False, encoding='utf-8')
